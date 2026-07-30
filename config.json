@@ -1,0 +1,17 @@
+{
+  "gameProcess": "EscapeFromTarkov",
+  "launcherProcess": "BsgLauncher",
+  "launcherPath": null,
+  "pollMs": 3000,
+  "brightnessPercent": 50,
+  "default": {
+    "contrast": 50,
+    "gamma": 1.0,
+    "digitalVibrance": 50
+  },
+  "game": {
+    "contrast": 60,
+    "gamma": 1.5,
+    "digitalVibrance": 70
+  }
+}
