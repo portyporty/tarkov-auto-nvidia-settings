@@ -5,6 +5,7 @@
   "launchMode": "auto",
   "steamAppId": 3932890,
   "gameOnly": false,
+  "hideConsole": false,
   "pollMs": 3000,
   "brightnessPercent": 50,
   "default": {

@@ -23,6 +23,10 @@ internal sealed class AppConfig
     [JsonPropertyName("gameOnly")]
     public bool GameOnly { get; set; }
 
+    /// <summary>Hides the console window in --session / --watch. One-shot commands stay visible.</summary>
+    [JsonPropertyName("hideConsole")]
+    public bool HideConsole { get; set; }
+
     [JsonPropertyName("pollMs")]
     public int PollMs { get; set; } = 3000;
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 /// <summary>
 /// Applies NVIDIA desktop color presets when Escape From Tarkov runs, then restores defaults.
@@ -21,6 +22,7 @@ internal static class Program
             string? launcherPath = _cfg.LauncherPath;
             string? forceMode = null;
             var gameOnly = _cfg.GameOnly;
+            var hideConsole = _cfg.HideConsole;
             for (var i = 1; i < args.Length; i++)
             {
                 if (args[i].Equals("--launcher", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
@@ -31,13 +33,25 @@ internal static class Program
                     forceMode = "bsg";
                 else if (args[i].Equals("--game-only", StringComparison.OrdinalIgnoreCase))
                     gameOnly = true;
+                else if (args[i].Equals("--hidden", StringComparison.OrdinalIgnoreCase))
+                    hideConsole = true;
+                else if (args[i].Equals("--show-console", StringComparison.OrdinalIgnoreCase))
+                    hideConsole = false;
             }
+
+            if (hideConsole)
+                HideConsoleWindow();
 
             return RunSession(launcherPath, forceMode, startLauncherIfNeeded: !gameOnly, exitWhenBothClosed: true, gameOnly: gameOnly);
         }
 
         if (args.Length is 1 && args[0].Equals("--watch", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_cfg.HideConsole)
+                HideConsoleWindow();
+
             return RunSession(null, null, startLauncherIfNeeded: false, exitWhenBothClosed: false, gameOnly: true);
+        }
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
         {
@@ -531,6 +545,32 @@ internal static class Program
 
     private static void Log(string msg) => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {msg}");
 
+    /// <summary>
+    /// Once hidden there is no Ctrl+C: killing the process from Task Manager leaves the game
+    /// preset applied, so the user has to run --reset. Only used for long-running modes.
+    /// </summary>
+    private static void HideConsoleWindow()
+    {
+        try
+        {
+            var handle = GetConsoleWindow();
+            if (handle != IntPtr.Zero)
+                ShowWindow(handle, SwHide);
+        }
+        catch
+        {
+            // no console to hide (already detached) — keep running
+        }
+    }
+
+    private const int SwHide = 0;
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
     private static int Usage()
     {
         var g = _cfg.Game;
@@ -542,12 +582,17 @@ internal static class Program
               Current game:    C{g.Contrast}%  G{g.Gamma:0.00}  DV{g.DigitalVibrance}%
               Current default: C{d.Contrast}%  G{d.Gamma:0.00}  DV{d.DigitalVibrance}%
               Launch mode:     {_cfg.LaunchMode} (steam AppId {_cfg.SteamAppId})
+              Hide console:    {(_cfg.HideConsole ? "on" : "off")} ("hideConsole" in config.json)
 
-              --session [--steam | --bsg | --game-only] [--launcher "C:\path\BsgLauncher.exe"]
+              --session [--steam | --bsg | --game-only] [--hidden | --show-console]
+                        [--launcher "C:\path\BsgLauncher.exe"]
                   Start BSG/Steam or game-only watch; restore colors; exit.
 
               --session --game-only
                   Ignore launcher. Colors only while EscapeFromTarkov.exe runs.
+
+              --session --hidden
+                  No console window. Stop it from Task Manager, then --reset.
 
               --apply game | default
               --apply cg-game | cg-default | dv-game | dv-default
