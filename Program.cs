@@ -19,17 +19,22 @@ internal static class Program
         if (args.Length >= 1 && args[0].Equals("--session", StringComparison.OrdinalIgnoreCase))
         {
             string? launcherPath = _cfg.LauncherPath;
+            string? forceMode = null;
             for (var i = 1; i < args.Length; i++)
             {
                 if (args[i].Equals("--launcher", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                     launcherPath = args[++i];
+                else if (args[i].Equals("--steam", StringComparison.OrdinalIgnoreCase))
+                    forceMode = "steam";
+                else if (args[i].Equals("--bsg", StringComparison.OrdinalIgnoreCase))
+                    forceMode = "bsg";
             }
 
-            return RunSession(launcherPath, startLauncherIfNeeded: true, exitWhenBothClosed: true);
+            return RunSession(launcherPath, forceMode, startLauncherIfNeeded: true, exitWhenBothClosed: true);
         }
 
         if (args.Length is 1 && args[0].Equals("--watch", StringComparison.OrdinalIgnoreCase))
-            return RunSession(null, startLauncherIfNeeded: false, exitWhenBothClosed: false);
+            return RunSession(null, null, startLauncherIfNeeded: false, exitWhenBothClosed: false);
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
         {
@@ -48,21 +53,24 @@ internal static class Program
         return Usage();
     }
 
-    private static int RunSession(string? launcherPath, bool startLauncherIfNeeded, bool exitWhenBothClosed)
+    private static int RunSession(string? launcherPath, string? forceMode, bool startLauncherIfNeeded, bool exitWhenBothClosed)
     {
         var game = _cfg.GameProcess;
         var launcher = _cfg.LauncherProcess;
         var g = _cfg.Game;
         var d = _cfg.Default;
+        var mode = forceMode ?? _cfg.LaunchMode;
+        var steamMode = false;
 
         Console.WriteLine("TarkovNvColor — session mode");
         Console.WriteLine($"  Config: {AppConfig.ResolvedPath}");
+        Console.WriteLine($"  Launch mode: {mode} (Steam AppId {_cfg.SteamAppId})");
         Console.WriteLine($"  Game preset:     C{g.Contrast}%  G{g.Gamma:0.00}  DV{g.DigitalVibrance}%");
         Console.WriteLine($"  Default preset:  C{d.Contrast}%  G{d.Gamma:0.00}  DV{d.DigitalVibrance}%");
-        Console.WriteLine($"  1) {launcher} starts (or already open) → we stay alive");
+        Console.WriteLine($"  1) Start BSG launcher or Steam Tarkov → we stay alive");
         Console.WriteLine($"  2) Play → {game}.exe → game colors");
-        Console.WriteLine($"  3) Game closes → default colors (launcher may stay open)");
-        Console.WriteLine($"  4) Launcher + game both closed → we exit");
+        Console.WriteLine($"  3) Game closes → default colors");
+        Console.WriteLine($"  4) BSG: exit when launcher+game closed | Steam: exit when game closed");
         Console.WriteLine($"  Poll every {_cfg.PollMs / 1000.0:0.#}s while session is alive.\n");
 
         Console.CancelKeyPress += (_, e) =>
@@ -72,31 +80,28 @@ internal static class Program
             Environment.Exit(0);
         };
 
-        if (startLauncherIfNeeded && !IsProcessRunning(launcher))
+        if (startLauncherIfNeeded && !IsProcessRunning(game))
         {
-            launcherPath ??= FindBsgLauncher();
-            if (launcherPath is null || !File.Exists(launcherPath))
-            {
-                Console.Error.WriteLine(
-                    $"{launcher}.exe not found automatically. Set launcherPath in config.json or pass:\n" +
-                    "  TarkovNvColor.exe --session --launcher \"C:\\path\\to\\BsgLauncher.exe\"");
+            var started = TryStartSessionHost(mode, launcherPath, launcher, out steamMode);
+            if (!started)
                 return 1;
-            }
-
-            Console.WriteLine($"Starting launcher: {launcherPath}");
-            Process.Start(new ProcessStartInfo(launcherPath) { UseShellExecute = true });
         }
         else if (IsProcessRunning(launcher))
         {
             Console.WriteLine($"{launcher} already running — attaching.");
+        }
+        else if (IsProcessRunning(game))
+        {
+            Console.WriteLine($"{game} already running — attaching.");
         }
         else if (!exitWhenBothClosed)
         {
             Console.WriteLine($"Forever watch: waiting for {game}.exe (no auto-exit).");
         }
 
-        for (var i = 0; i < 20 && startLauncherIfNeeded &&
+        for (var i = 0; i < 40 && startLauncherIfNeeded &&
                         !IsProcessRunning(launcher) &&
+                        !IsProcessRunning("steam") &&
                         !IsProcessRunning(game); i++)
             Thread.Sleep(250);
 
@@ -115,6 +120,7 @@ internal static class Program
         while (true)
         {
             var launcherUp = IsProcessRunning(launcher);
+            var steamUp = IsProcessRunning("steam");
             var gameUp = IsProcessRunning(game);
 
             if (gameUp && !_tarkovActive)
@@ -142,17 +148,163 @@ internal static class Program
                 {
                     Log($"restore failed: {ex.Message}");
                 }
+
+                // Steam stays open forever for most people — end session when Tarkov quits.
+                if (exitWhenBothClosed && steamMode)
+                {
+                    Log("Steam session: game closed → exiting.");
+                    return 0;
+                }
             }
 
-            if (exitWhenBothClosed && !launcherUp && !gameUp)
+            if (exitWhenBothClosed && !steamMode && !launcherUp && !gameUp)
             {
                 try { Apply(_cfg.DefaultPreset, Parts.All); } catch { /* ignore */ }
                 Log("launcher + game both closed → session end, exiting.");
                 return 0;
             }
 
+            // Steam auto-start failed silently / user closed Steam before Play.
+            if (exitWhenBothClosed && steamMode && !_tarkovActive && !gameUp && !steamUp && !launcherUp)
+            {
+                // Give Steam a moment to come up after steam:// URL.
+                Thread.Sleep(_cfg.PollMs);
+                if (!IsProcessRunning("steam") && !IsProcessRunning(game) && !IsProcessRunning(launcher))
+                {
+                    try { Apply(_cfg.DefaultPreset, Parts.All); } catch { /* ignore */ }
+                    Log("Steam not running and game never started → exiting.");
+                    return 0;
+                }
+            }
+
             Thread.Sleep(_cfg.PollMs);
         }
+    }
+
+    /// <summary>Starts BSG and/or Steam Tarkov depending on launchMode.</summary>
+    private static bool TryStartSessionHost(string mode, string? launcherPath, string launcherName, out bool steamMode)
+    {
+        steamMode = false;
+
+        if (mode is "steam")
+        {
+            steamMode = true;
+            return TryLaunchSteamTarkov();
+        }
+
+        if (IsProcessRunning(launcherName))
+        {
+            Console.WriteLine($"{launcherName} already running — attaching.");
+            return true;
+        }
+
+        if (mode is "bsg")
+        {
+            launcherPath ??= FindBsgLauncher();
+            if (launcherPath is null || !File.Exists(launcherPath))
+            {
+                Console.Error.WriteLine(
+                    $"{launcherName}.exe not found. Set launcherPath in config.json, pass --launcher, or use launchMode \"steam\" / --steam.");
+                return false;
+            }
+
+            Console.WriteLine($"Starting BSG launcher: {launcherPath}");
+            Process.Start(new ProcessStartInfo(launcherPath) { UseShellExecute = true });
+            return true;
+        }
+
+        // auto: prefer BSG, fall back to Steam
+        launcherPath ??= FindBsgLauncher();
+        if (launcherPath is not null && File.Exists(launcherPath))
+        {
+            Console.WriteLine($"Starting BSG launcher: {launcherPath}");
+            Process.Start(new ProcessStartInfo(launcherPath) { UseShellExecute = true });
+            return true;
+        }
+
+        Console.WriteLine("BSG launcher not found — trying Steam Tarkov...");
+        steamMode = true;
+        if (TryLaunchSteamTarkov())
+            return true;
+
+        Console.Error.WriteLine("""
+            Could not start BSG launcher or Steam Tarkov.
+
+              BSG: set launcherPath in config.json
+                   or: TarkovNvColor.exe --session --launcher "C:\path\BsgLauncher.exe"
+
+              Steam: install Steam + Escape From Tarkov (AppId 3932890)
+                     or set "launchMode": "steam" in config.json
+                     or: TarkovNvColor.exe --session --steam
+            """);
+        return false;
+    }
+
+    private static bool TryLaunchSteamTarkov()
+    {
+        var url = $"steam://rungameid/{_cfg.SteamAppId}";
+        try
+        {
+            Console.WriteLine($"Starting Steam Tarkov: {url}");
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Steam launch failed: {ex.Message}");
+            var steamExe = FindSteamExe();
+            if (steamExe is null)
+                return false;
+
+            try
+            {
+                Console.WriteLine($"Retry via steam.exe -applaunch {_cfg.SteamAppId}");
+                Process.Start(new ProcessStartInfo(steamExe, $"-applaunch {_cfg.SteamAppId}")
+                {
+                    UseShellExecute = true
+                });
+                return true;
+            }
+            catch (Exception ex2)
+            {
+                Console.Error.WriteLine($"steam.exe launch failed: {ex2.Message}");
+                return false;
+            }
+        }
+    }
+
+    private static string? FindSteamExe()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+            var path = key?.GetValue("SteamPath") as string
+                       ?? key?.GetValue("SteamExe") as string;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                var exe = path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? path
+                    : Path.Combine(path.Replace('/', '\\'), "steam.exe");
+                if (File.Exists(exe))
+                    return exe;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        foreach (var c in new[]
+                 {
+                     @"C:\Program Files (x86)\Steam\steam.exe",
+                     @"C:\Program Files\Steam\steam.exe",
+                 })
+        {
+            if (File.Exists(c))
+                return c;
+        }
+
+        return null;
     }
 
     private static bool IsProcessRunning(string name)
@@ -348,9 +500,10 @@ internal static class Program
               Edit presets in config.json (next to the exe) — no rebuild needed.
               Current game:    C{g.Contrast}%  G{g.Gamma:0.00}  DV{g.DigitalVibrance}%
               Current default: C{d.Contrast}%  G{d.Gamma:0.00}  DV{d.DigitalVibrance}%
+              Launch mode:     {_cfg.LaunchMode} (steam AppId {_cfg.SteamAppId})
 
-              --session [--launcher "C:\path\BsgLauncher.exe"]
-                  Start/attach Battlestate Launcher, watch Tarkov, exit when both closed.
+              --session [--steam | --bsg] [--launcher "C:\path\BsgLauncher.exe"]
+                  Start BSG or Steam Tarkov, watch game, restore colors, exit.
 
               --apply game | default
               --apply cg-game | cg-default | dv-game | dv-default

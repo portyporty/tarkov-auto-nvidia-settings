@@ -22,13 +22,15 @@ Recommended — one play session (starts/attaches to Battlestate Launcher, exits
 .\TarkovNvColor.exe --session
 ```
 
-If the launcher is not found automatically:
+If the launcher is not found automatically, it falls back to **Steam** (`steam://rungameid/3932890`). Force a mode:
 
 ```powershell
+.\TarkovNvColor.exe --session --steam
+.\TarkovNvColor.exe --session --bsg
 .\TarkovNvColor.exe --session --launcher "C:\Battlestate Games\BsgLauncher\BsgLauncher.exe"
 ```
 
-Or set `launcherPath` in `config.json` (see below).
+Or set in `config.json`: `"launchMode": "steam"` / `"bsg"` / `"auto"`.
 
 Test presets manually:
 
@@ -40,7 +42,9 @@ Test presets manually:
 
 | Flag | What it does |
 |------|----------------|
-| `--session` | Attach/start launcher, apply game colors while Tarkov runs, restore defaults, exit when both closed |
+| `--session` | Start BSG or Steam Tarkov (`launchMode`), apply game colors while Tarkov runs, restore, exit |
+| `--session --steam` | Force Steam launch (`steam://rungameid/3932890`) |
+| `--session --bsg` | Force Battlestate launcher only |
 | `--apply game` | One-shot apply the **game** preset from `config.json` |
 | `--apply default` | One-shot apply the **default** preset from `config.json` |
 | `--reset` | Neutral baseline (contrast/gamma 50 / 1.00, DV 50) |
@@ -64,6 +68,8 @@ Example: bump DV to 80, lower gamma to 1.2 → save → run again.
   "gameProcess": "EscapeFromTarkov",
   "launcherProcess": "BsgLauncher",
   "launcherPath": null,
+  "launchMode": "auto",
+  "steamAppId": 3932890,
   "pollMs": 3000,
   "brightnessPercent": 50,
   "default": {
@@ -83,6 +89,8 @@ Example: bump DV to 80, lower gamma to 1.2 → save → run again.
 |-------|---------|
 | `game` | Values while Tarkov is running |
 | `default` | Values when Tarkov is not running |
+| `launchMode` | `auto` (BSG if found, else Steam), `bsg`, or `steam` |
+| `steamAppId` | Steam App ID for Escape From Tarkov (`3932890`) |
 | `launcherPath` | Optional full path to `BsgLauncher.exe` if auto-detect fails |
 | `gameProcess` / `launcherProcess` | Process names without `.exe` |
 | `pollMs` | How often to check (ms) while a session is alive |

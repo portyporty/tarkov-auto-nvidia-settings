@@ -12,6 +12,13 @@ internal sealed class AppConfig
     [JsonPropertyName("launcherPath")]
     public string? LauncherPath { get; set; }
 
+    /// <summary>auto = BSG if found, else Steam; bsg = Battlestate only; steam = Steam only.</summary>
+    [JsonPropertyName("launchMode")]
+    public string LaunchMode { get; set; } = "auto";
+
+    [JsonPropertyName("steamAppId")]
+    public int SteamAppId { get; set; } = 3932890;
+
     [JsonPropertyName("pollMs")]
     public int PollMs { get; set; } = 3000;
 
@@ -79,6 +86,14 @@ internal sealed class AppConfig
         Game.Clamp();
         if (string.IsNullOrWhiteSpace(LauncherPath))
             LauncherPath = null;
+        LaunchMode = (LaunchMode ?? "auto").Trim().ToLowerInvariant() switch
+        {
+            "bsg" or "battlestate" or "launcher" => "bsg",
+            "steam" => "steam",
+            _ => "auto"
+        };
+        if (SteamAppId <= 0)
+            SteamAppId = 3932890;
     }
 }
 
