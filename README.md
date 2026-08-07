@@ -27,8 +27,11 @@ If the launcher is not found automatically, it falls back to **Steam** (`steam:/
 ```powershell
 .\TarkovNvColor.exe --session --steam
 .\TarkovNvColor.exe --session --bsg
+.\TarkovNvColor.exe --session --game-only
 .\TarkovNvColor.exe --session --launcher "C:\Battlestate Games\BsgLauncher\BsgLauncher.exe"
 ```
+
+`--game-only` ignores the launcher entirely: colors apply only while `EscapeFromTarkov.exe` is running, then restore and exit. Or set `"gameOnly": true` in `config.json`.
 
 Or set in `config.json`: `"launchMode": "steam"` / `"bsg"` / `"auto"`.
 
@@ -131,7 +134,8 @@ Icon can stay `BsgLauncher.exe`.
 
 ## Notes
 
-- Best with borderless / windowed fullscreen Tarkov on the main monitor.
+- Contrast / gamma / digital vibrance apply to the **Windows primary (main) monitor only**.
+- Best with borderless / windowed fullscreen Tarkov on that main monitor.
 - Uses `nvapi64.dll` already on your PC (same idea as other desktop-color utilities / Control Panel). One entry point is not listed in the public SDK docs; nothing extra is downloaded.
 - Control Panel sliders may lag the real image briefly; the image path is NVAPI.
 - Not affiliated with Battlestate Games or NVIDIA.

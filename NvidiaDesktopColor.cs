@@ -12,6 +12,7 @@ internal static class NvidiaDesktopColor
     private const uint IdUnload = 0xD22BDD7E;
     private const uint IdEnumPhysicalGpus = 0xE5AC921F;
     private const uint IdGetConnectedDisplayIds = 0x0078DBA2;
+    private const uint IdGetGdiPrimaryDisplayId = 0x1E9D8A31;
     private const uint IdSetTargetGammaCorrection = 0x7082A053;
 
     private const int NvApiOk = 0;
@@ -28,6 +29,7 @@ internal static class NvidiaDesktopColor
     private delegate int NvApiUnload();
     private delegate int NvApiEnumPhysicalGpus([Out] IntPtr[] gpus, out int count);
     private delegate int NvApiGpuGetConnectedDisplayIds(IntPtr gpu, IntPtr ids, ref int count, uint flags);
+    private delegate int NvApiDispGetGdiPrimaryDisplayId(out uint displayId);
     private delegate int NvApiDispSetTargetGammaCorrection(uint displayId, IntPtr gammaCorrection);
 
     public static void Apply(int brightnessPercent, int contrastPercent, double gamma)
@@ -43,28 +45,18 @@ internal static class NvidiaDesktopColor
 
         try
         {
-            var displayIds = GetActiveDisplayIds();
-            if (displayIds.Count == 0)
-                throw new InvalidOperationException("No active NVIDIA displays found.");
-
+            // Primary monitor only (same idea as DV). Multi-monitor users were getting CG on every NVIDIA output.
+            var displayId = GetPrimaryDisplayId();
             var setPtr = Require(IdSetTargetGammaCorrection, "SetTargetGammaCorrection");
             var set = Marshal.GetDelegateForFunctionPointer<NvApiDispSetTargetGammaCorrection>(setPtr);
 
             var block = BuildGammaCorrectionBlock(b, c, g);
             try
             {
-                var applied = 0;
-                foreach (var id in displayIds)
-                {
-                    var r = set(id, block);
-                    if (r == NvApiOk)
-                        applied++;
-                    else
-                        Console.WriteLine($"      warn: display 0x{id:X8} gamma status={r}");
-                }
-
-                if (applied == 0)
-                    throw new InvalidOperationException("SetTargetGammaCorrection failed on all displays.");
+                var r = set(displayId, block);
+                if (r != NvApiOk)
+                    throw new InvalidOperationException(
+                        $"SetTargetGammaCorrection failed on primary display 0x{displayId:X8} (status={r}).");
             }
             finally
             {
@@ -72,7 +64,7 @@ internal static class NvidiaDesktopColor
             }
 
             WriteRegistryAllDevices(b, c, g);
-            Console.WriteLine($"      NV scale B={b:0} C={c:0} G={g:0}");
+            Console.WriteLine($"      primary display 0x{displayId:X8}  NV scale B={b:0} C={c:0} G={g:0}");
         }
         finally
         {
@@ -113,6 +105,24 @@ internal static class NvidiaDesktopColor
         }
 
         return ptr;
+    }
+
+    private static uint GetPrimaryDisplayId()
+    {
+        var primaryPtr = QueryInterface(IdGetGdiPrimaryDisplayId);
+        if (primaryPtr != IntPtr.Zero)
+        {
+            var getPrimary = Marshal.GetDelegateForFunctionPointer<NvApiDispGetGdiPrimaryDisplayId>(primaryPtr);
+            if (getPrimary(out var primaryId) == NvApiOk && primaryId != 0)
+                return primaryId;
+        }
+
+        // Fallback: first active/connected NVIDIA output (better than painting every monitor).
+        var ids = GetActiveDisplayIds();
+        if (ids.Count == 0)
+            throw new InvalidOperationException("No active NVIDIA displays found (and GDI primary lookup failed).");
+        Console.WriteLine("      warn: GetGDIPrimaryDisplayId unavailable — using first active NVIDIA display.");
+        return ids[0];
     }
 
     private static List<uint> GetActiveDisplayIds()

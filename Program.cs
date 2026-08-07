@@ -20,6 +20,7 @@ internal static class Program
         {
             string? launcherPath = _cfg.LauncherPath;
             string? forceMode = null;
+            var gameOnly = _cfg.GameOnly;
             for (var i = 1; i < args.Length; i++)
             {
                 if (args[i].Equals("--launcher", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
@@ -28,13 +29,15 @@ internal static class Program
                     forceMode = "steam";
                 else if (args[i].Equals("--bsg", StringComparison.OrdinalIgnoreCase))
                     forceMode = "bsg";
+                else if (args[i].Equals("--game-only", StringComparison.OrdinalIgnoreCase))
+                    gameOnly = true;
             }
 
-            return RunSession(launcherPath, forceMode, startLauncherIfNeeded: true, exitWhenBothClosed: true);
+            return RunSession(launcherPath, forceMode, startLauncherIfNeeded: !gameOnly, exitWhenBothClosed: true, gameOnly: gameOnly);
         }
 
         if (args.Length is 1 && args[0].Equals("--watch", StringComparison.OrdinalIgnoreCase))
-            return RunSession(null, null, startLauncherIfNeeded: false, exitWhenBothClosed: false);
+            return RunSession(null, null, startLauncherIfNeeded: false, exitWhenBothClosed: false, gameOnly: true);
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
         {
@@ -53,7 +56,7 @@ internal static class Program
         return Usage();
     }
 
-    private static int RunSession(string? launcherPath, string? forceMode, bool startLauncherIfNeeded, bool exitWhenBothClosed)
+    private static int RunSession(string? launcherPath, string? forceMode, bool startLauncherIfNeeded, bool exitWhenBothClosed, bool gameOnly)
     {
         var game = _cfg.GameProcess;
         var launcher = _cfg.LauncherProcess;
@@ -64,13 +67,31 @@ internal static class Program
 
         Console.WriteLine("TarkovNvColor — session mode");
         Console.WriteLine($"  Config: {AppConfig.ResolvedPath}");
-        Console.WriteLine($"  Launch mode: {mode} (Steam AppId {_cfg.SteamAppId})");
+        if (gameOnly)
+        {
+            Console.WriteLine("  Mode: game-only (ignore launcher / Steam — colors follow EscapeFromTarkov only)");
+        }
+        else
+        {
+            Console.WriteLine($"  Launch mode: {mode} (Steam AppId {_cfg.SteamAppId})");
+        }
+
         Console.WriteLine($"  Game preset:     C{g.Contrast}%  G{g.Gamma:0.00}  DV{g.DigitalVibrance}%");
         Console.WriteLine($"  Default preset:  C{d.Contrast}%  G{d.Gamma:0.00}  DV{d.DigitalVibrance}%");
-        Console.WriteLine($"  1) Start BSG launcher or Steam Tarkov → we stay alive");
-        Console.WriteLine($"  2) Play → {game}.exe → game colors");
-        Console.WriteLine($"  3) Game closes → default colors");
-        Console.WriteLine($"  4) BSG: exit when launcher+game closed | Steam: exit when game closed");
+        if (gameOnly)
+        {
+            Console.WriteLine($"  1) Wait for {game}.exe (launcher ignored)");
+            Console.WriteLine("  2) Game running → game colors");
+            Console.WriteLine("  3) Game closes → default colors, then exit");
+        }
+        else
+        {
+            Console.WriteLine($"  1) Start BSG launcher or Steam Tarkov → we stay alive");
+            Console.WriteLine($"  2) Play → {game}.exe → game colors");
+            Console.WriteLine($"  3) Game closes → default colors");
+            Console.WriteLine($"  4) BSG: exit when launcher+game closed | Steam: exit when game closed");
+        }
+
         Console.WriteLine($"  Poll every {_cfg.PollMs / 1000.0:0.#}s while session is alive.\n");
 
         Console.CancelKeyPress += (_, e) =>
@@ -80,13 +101,13 @@ internal static class Program
             Environment.Exit(0);
         };
 
-        if (startLauncherIfNeeded && !IsProcessRunning(game))
+        if (!gameOnly && startLauncherIfNeeded && !IsProcessRunning(game))
         {
             var started = TryStartSessionHost(mode, launcherPath, launcher, out steamMode);
             if (!started)
                 return 1;
         }
-        else if (IsProcessRunning(launcher))
+        else if (!gameOnly && IsProcessRunning(launcher))
         {
             Console.WriteLine($"{launcher} already running — attaching.");
         }
@@ -94,22 +115,37 @@ internal static class Program
         {
             Console.WriteLine($"{game} already running — attaching.");
         }
-        else if (!exitWhenBothClosed)
+        else if (gameOnly || !exitWhenBothClosed)
         {
-            Console.WriteLine($"Forever watch: waiting for {game}.exe (no auto-exit).");
+            Console.WriteLine($"Waiting for {game}.exe (launcher ignored).");
         }
 
-        for (var i = 0; i < 40 && startLauncherIfNeeded &&
-                        !IsProcessRunning(launcher) &&
-                        !IsProcessRunning("steam") &&
-                        !IsProcessRunning(game); i++)
-            Thread.Sleep(250);
+        if (!gameOnly)
+        {
+            for (var i = 0; i < 40 && startLauncherIfNeeded &&
+                            !IsProcessRunning(launcher) &&
+                            !IsProcessRunning("steam") &&
+                            !IsProcessRunning(game); i++)
+                Thread.Sleep(250);
+        }
 
         _tarkovActive = IsProcessRunning(game);
         try
         {
-            Apply(_tarkovActive ? _cfg.GamePreset : _cfg.DefaultPreset, Parts.All);
-            Log(_tarkovActive ? "Game already running → game preset" : "waiting for Play → default");
+            if (_tarkovActive)
+            {
+                Apply(_cfg.GamePreset, Parts.All);
+                Log("Game already running → game preset");
+            }
+            else if (!gameOnly)
+            {
+                Apply(_cfg.DefaultPreset, Parts.All);
+                Log("waiting for Play → default");
+            }
+            else
+            {
+                Log("game-only: desktop unchanged until game starts");
+            }
         }
         catch (Exception ex)
         {
@@ -149,12 +185,19 @@ internal static class Program
                     Log($"restore failed: {ex.Message}");
                 }
 
-                // Steam stays open forever for most people — end session when Tarkov quits.
-                if (exitWhenBothClosed && steamMode)
+                if (exitWhenBothClosed && (gameOnly || steamMode))
                 {
-                    Log("Steam session: game closed → exiting.");
+                    Log(gameOnly
+                        ? "game-only: game closed → exiting."
+                        : "Steam session: game closed → exiting.");
                     return 0;
                 }
+            }
+
+            if (gameOnly)
+            {
+                Thread.Sleep(_cfg.PollMs);
+                continue;
             }
 
             if (exitWhenBothClosed && !steamMode && !launcherUp && !gameUp)
@@ -164,10 +207,8 @@ internal static class Program
                 return 0;
             }
 
-            // Steam auto-start failed silently / user closed Steam before Play.
             if (exitWhenBothClosed && steamMode && !_tarkovActive && !gameUp && !steamUp && !launcherUp)
             {
-                // Give Steam a moment to come up after steam:// URL.
                 Thread.Sleep(_cfg.PollMs);
                 if (!IsProcessRunning("steam") && !IsProcessRunning(game) && !IsProcessRunning(launcher))
                 {
@@ -502,8 +543,11 @@ internal static class Program
               Current default: C{d.Contrast}%  G{d.Gamma:0.00}  DV{d.DigitalVibrance}%
               Launch mode:     {_cfg.LaunchMode} (steam AppId {_cfg.SteamAppId})
 
-              --session [--steam | --bsg] [--launcher "C:\path\BsgLauncher.exe"]
-                  Start BSG or Steam Tarkov, watch game, restore colors, exit.
+              --session [--steam | --bsg | --game-only] [--launcher "C:\path\BsgLauncher.exe"]
+                  Start BSG/Steam or game-only watch; restore colors; exit.
+
+              --session --game-only
+                  Ignore launcher. Colors only while EscapeFromTarkov.exe runs.
 
               --apply game | default
               --apply cg-game | cg-default | dv-game | dv-default

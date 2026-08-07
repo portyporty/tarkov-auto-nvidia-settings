@@ -19,6 +19,10 @@ internal sealed class AppConfig
     [JsonPropertyName("steamAppId")]
     public int SteamAppId { get; set; } = 3932890;
 
+    /// <summary>If true, ignore launcher — only toggle colors based on EscapeFromTarkov.</summary>
+    [JsonPropertyName("gameOnly")]
+    public bool GameOnly { get; set; }
+
     [JsonPropertyName("pollMs")]
     public int PollMs { get; set; } = 3000;
 
