@@ -5,10 +5,13 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
-$exe = Join-Path $projectRoot "publish\TarkovNvColor.exe"
+$exe = Join-Path $projectRoot "TarkovNvColor.exe"
 if (-not (Test-Path $exe)) {
-    Write-Host "ERROR: missing $exe"
-    Write-Host "Put TarkovNvColor.exe in publish\ then re-run."
+    $exe = Join-Path $projectRoot "publish\TarkovNvColor.exe"
+}
+if (-not (Test-Path $exe)) {
+    Write-Host "ERROR: TarkovNvColor.exe not found next to this script or in publish\"
+    Write-Host "Put the exe beside Fix-TarkovShortcut.bat (Release zip) or under publish\."
     exit 1
 }
 
