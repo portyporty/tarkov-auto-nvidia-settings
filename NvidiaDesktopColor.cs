@@ -36,7 +36,7 @@ internal static class NvidiaDesktopColor
     {
         var b = PanelPercentToNv(brightnessPercent);
         var c = PanelPercentToNv(contrastPercent);
-        var g = Math.Clamp(gamma, 0.30, 1.80) * 100.0;
+        var g = Math.Clamp(gamma, PresetConfig.GammaMin, PresetConfig.GammaMax) * 100.0;
 
         var initPtr = Require(IdInitialize, "Initialize");
         var status = Marshal.GetDelegateForFunctionPointer<NvApiInitialize>(initPtr)();
