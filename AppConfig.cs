@@ -90,8 +90,8 @@ internal sealed class AppConfig
         if (PollMs < 500)
             PollMs = 500;
         BrightnessPercent = Math.Clamp(BrightnessPercent, 0, 100);
-        Default.Clamp();
-        Game.Clamp();
+        Default.Clamp("default");
+        Game.Clamp("game");
         if (string.IsNullOrWhiteSpace(LauncherPath))
             LauncherPath = null;
         LaunchMode = (LaunchMode ?? "auto").Trim().ToLowerInvariant() switch
@@ -107,6 +107,10 @@ internal sealed class AppConfig
 
 internal sealed class PresetConfig
 {
+    // Matches a conservative slice of NVIDIA Control Panel desktop gamma (~0.30–3.00).
+    public const double GammaMin = 0.30;
+    public const double GammaMax = 2.80;
+
     [JsonPropertyName("contrast")]
     public int Contrast { get; set; } = 50;
 
@@ -116,11 +120,19 @@ internal sealed class PresetConfig
     [JsonPropertyName("digitalVibrance")]
     public int DigitalVibrance { get; set; } = 50;
 
-    public void Clamp()
+    public void Clamp(string? label = null)
     {
         Contrast = Math.Clamp(Contrast, 0, 100);
-        Gamma = Math.Clamp(Gamma, 0.30, 1.80);
         DigitalVibrance = Math.Clamp(DigitalVibrance, 0, 100);
+
+        var before = Gamma;
+        Gamma = Math.Clamp(Gamma, GammaMin, GammaMax);
+        if (Math.Abs(before - Gamma) > 0.0001)
+        {
+            var who = string.IsNullOrWhiteSpace(label) ? "gamma" : $"{label}.gamma";
+            Console.WriteLine(
+                $"  note: {who} clamped {before:0.00} → {Gamma:0.00} (allowed {GammaMin:0.00}–{GammaMax:0.00})");
+        }
     }
 }
 

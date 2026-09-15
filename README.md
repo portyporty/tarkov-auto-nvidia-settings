@@ -1,6 +1,6 @@
 # TarkovNvColor
 
-Windows utility that applies your Escape From Tarkov NVIDIA desktop color preset when the game runs, then restores defaults when you quit.
+Applies your Escape From Tarkov NVIDIA desktop color preset when the game runs, then restores defaults when you quit.
 
 | Setting | Default | Game (shipped) |
 |--------|---------|----------------|
@@ -14,133 +14,120 @@ Colors apply to the **Windows primary (main) monitor only**.
 
 - Windows
 - NVIDIA GPU + driver (`nvapi64.dll` — already installed with the driver)
-- No .NET install needed if you use the **Release folder** / GitHub Release zip (self-contained)
 
-## Release folder (easiest)
+## Quick start (Release zip)
 
-Use the ready-made `release\` folder (or the GitHub **Releases** zip). Everything is already in one place:
+1. Download `TarkovNvColor-windows-x64.zip` from [Releases](https://github.com/portyporty/tarkov-auto-nvidia-settings/releases).
+2. Extract anywhere and open the folder that contains `TarkovNvColor.exe` + `config.json`.
+3. Double-click **`1-Start-Session.bat`**.
+4. Play Tarkov. Colors flip on game start and restore when you quit.
 
-| File | What to do |
-|------|------------|
-| `1-Start-Session.bat` | **Normal use** — opens BSG launcher (or Steam if BSG missing), applies colors while Tarkov runs |
-| `2-Start-GameOnly.bat` | Does **not** open any launcher — you start Tarkov yourself; colors only while the game runs |
-| `3-Start-Steam.bat` | Forces Steam Tarkov (`steam://rungameid/3932890`) |
-| `4-Apply-Game-Preset.bat` | Instantly apply the game colors (test without launching Tarkov) |
-| `5-Reset-Colors.bat` | Restore neutral colors (C50 / G1.00 / DV50) |
-| `6-Fix-StartMenu-Shortcut.bat` | After a Tarkov/BSG update: recreate one Start Menu shortcut → this folder’s exe `--session` (may ask Admin) |
-| `config.json` | Edit in Notepad to change contrast / gamma / DV / Steam / game-only / hidden console |
-| `TarkovNvColor.exe` | The app (used by the `.bat` files) |
-| `Fix-TarkovShortcut.ps1` | Helper that `6-...bat` runs — don't delete it, don't run it directly |
+**Want Start Menu “Escape From Tarkov” to do this automatically?**  
+Also run **`6-Fix-StartMenu-Shortcut.bat`** once (see [Start Menu shortcut](#start-menu-shortcut) below). After that, launching Tarkov from Start opens this app + colors with it.
 
-### Typical use
+Keep every file in the **same folder**. Don’t move the exe away from `config.json`.
 
-1. Open the `release` folder (or extract the GitHub zip anywhere).
-2. Double-click **`1-Start-Session.bat`**.
-3. Play Tarkov as usual. Colors flip on game start and restore when you quit.
+| File | What it does |
+|------|----------------|
+| `1-Start-Session.bat` | Normal use — BSG launcher (or Steam if BSG missing) |
+| `2-Start-GameOnly.bat` | You start Tarkov yourself; colors follow the game only |
+| `3-Start-Steam.bat` | Force Steam Tarkov |
+| `4-Apply-Game-Preset.bat` | Apply game colors once (test) |
+| `5-Reset-Colors.bat` | Neutral colors (C50 / G1.00 / DV50) |
+| `6-Fix-StartMenu-Shortcut.bat` | **Main feature:** make Start Menu Tarkov launch this app + color presets (re-run after Tarkov/BSG updates) |
+| `config.json` | Edit presets in Notepad — no rebuild |
+| `TarkovNvColor.exe` | The app |
 
-**Already open Tarkov yourself?** Use **`2-Start-GameOnly.bat`** instead.
+### Start Menu shortcut
 
-**Want different colors?** Edit `config.json` → save → run the bat again. No rebuild.
+This is one of the main ways to use the tool day-to-day — not just a repair script.
 
-**Start Menu broke after an update (two launchers / plain BSG again)?** Run **`6-Fix-StartMenu-Shortcut.bat`**.
+Run **`6-Fix-StartMenu-Shortcut.bat`** once. It replaces your Start Menu Tarkov / Battlestate shortcut so that:
 
-Keep all files in the **same folder**. Don’t separate the exe from `config.json` or the `.bat` files.
+- Start → Escape From Tarkov (or similar) starts **`TarkovNvColor.exe --session`**
+- Launcher + game colors are handled automatically
+- You don’t need to open the release folder every time
+
+After a Tarkov or BSG update, Windows often recreates a plain launcher shortcut. If colors stop applying from Start Menu, run **`6-...bat` again**.
+
+May ask for Admin once (needed to clean/recreate Start Menu shortcuts).
+
+### Change colors
+
+Edit `config.json` → save → run the bat / command again.
+
+Allowed ranges:
+
+| Setting | Range |
+|---------|--------|
+| Contrast / Digital Vibrance | 0–100 |
+| Gamma | **0.30–2.80** (values outside this are clamped) |
+
+## PowerShell tip
+
+From the exe folder, commands need `.\` in front:
+
+```powershell
+cd path\to\folder\with\TarkovNvColor.exe
+.\TarkovNvColor.exe --apply game
+.\TarkovNvColor.exe --reset
+.\TarkovNvColor.exe --session
+```
+
+Easy way to open PowerShell there: click the folder address bar, type `powershell`, Enter.
+
+`--apply` and `--session` print a `Config:` line showing which `config.json` was loaded.
 
 ## What `--session` does
 
-Default session (launcher-aware):
+1. Starts/attaches to Battlestate launcher, or Steam if BSG is missing (`launchMode: auto`).
+2. `EscapeFromTarkov.exe` running → **game** preset.
+3. Game closes → **default** preset.
+4. Exits when the session ends (not a 24/7 background service).
 
-1. Starts or attaches to the **Battlestate launcher**, or falls back to **Steam** if BSG is not found (`launchMode: auto`).
-2. When `EscapeFromTarkov.exe` starts → **game** preset.
-3. When the game closes → **default** preset.
-4. Exits when the play session ends (BSG: launcher + game both closed; Steam / game-only: when the game closes).
-
-Not a 24/7 background service.
-
-## Features
-
-### Editable presets (`config.json`)
-
-Change numbers in Notepad next to the exe — **no rebuild**.
-
-### Battlestate + Steam
+## Launch modes
 
 | Mode | Behavior |
 |------|----------|
-| `auto` (default) | Prefer BSG launcher; if missing, launch Steam Tarkov (`steam://rungameid/3932890`) |
-| `bsg` | Battlestate launcher only |
+| `auto` (default) | Prefer BSG; else Steam Tarkov |
+| `bsg` | Battlestate only |
 | `steam` | Steam only |
-
-CLI overrides:
 
 ```powershell
 .\TarkovNvColor.exe --session --bsg
 .\TarkovNvColor.exe --session --steam
+.\TarkovNvColor.exe --session --game-only
 .\TarkovNvColor.exe --session --launcher "C:\Battlestate Games\BsgLauncher\BsgLauncher.exe"
 ```
 
-### Game-only (ignore launcher)
+Or set `"gameOnly": true` / `"launchMode": "steam"` in `config.json`.
 
-Does **not** start BSG or Steam. Does **not** change colors until the game process appears. Applies the game preset only while Tarkov is running, restores defaults when it exits, then quits.
+## Hidden console (optional, not recommended)
 
-```powershell
-.\TarkovNvColor.exe --session --game-only
-```
+`"hideConsole": true` hides the console for session/watch modes.
 
-Or in `config.json`: `"gameOnly": true`  
-Or double-click `2-Start-GameOnly.bat` in the Release folder.
-
-### Hidden console (optional, not recommended)
-
-Set `"hideConsole": true` in `config.json` and the console window disappears for **every** way you start a session — the `.bat` files, the Start Menu shortcut, and the command line. One-shot commands (`--apply`, `--reset`) always stay visible so you can read their output.
+Prefer leaving it visible: you see errors and can `Ctrl+C` (restores colors). If hidden and something sticks, end `TarkovNvColor.exe` in Task Manager, then run `5-Reset-Colors.bat`.
 
 ```powershell
-.\TarkovNvColor.exe --session --hidden        # hide once, ignoring config.json
-.\TarkovNvColor.exe --session --show-console  # show once, ignoring config.json
+.\TarkovNvColor.exe --session --hidden
+.\TarkovNvColor.exe --session --show-console
 ```
 
-**I don't recommend leaving this on.** With the window open you can see what the app is doing, and you can stop it cleanly with `Ctrl+C` — which restores your colors on the way out. Hidden, none of that is available: if the app gets stuck, or Tarkov crashes, or a game update changes something, you're left with the game preset applied and no obvious way to fix it. You'd have to open Task Manager, end `TarkovNvColor.exe`, and then run `5-Reset-Colors.bat`.
-
-Turn it on only after everything works reliably for you, and remember `--show-console` exists when you need to see what went wrong.
-
-### Primary monitor only
-
-Contrast, gamma, and digital vibrance target the **Windows main display** (`Make this my main display`). Other monitors are left alone.
-
-### Manual apply / reset
-
-```powershell
-.\TarkovNvColor.exe --apply game
-.\TarkovNvColor.exe --apply default
-.\TarkovNvColor.exe --reset
-```
-
-Or use `4-Apply-Game-Preset.bat` / `5-Reset-Colors.bat`.
-
-### Start Menu after a Tarkov update
-
-BSG updates often recreate a plain launcher shortcut. Run `6-Fix-StartMenu-Shortcut.bat`.
-
-It finds Battlestate / Tarkov shortcuts, removes duplicates, and recreates one user Start Menu shortcut pointing at this folder’s `TarkovNvColor.exe --session` (BSG icon).
-
-## CLI reference
+## CLI
 
 | Flag | What it does |
 |------|----------------|
-| `--session` | Launcher-aware session (see above) |
-| `--session --steam` | Force Steam Tarkov |
-| `--session --bsg` | Force Battlestate launcher |
-| `--session --game-only` | Ignore launcher; colors follow `EscapeFromTarkov.exe` only |
-| `--session --hidden` | No console window (see the warning above) |
-| `--session --show-console` | Keep the console visible even if `hideConsole` is `true` |
-| `--session --launcher "path"` | Explicit `BsgLauncher.exe` path |
+| `--session` | Launcher-aware session |
+| `--session --steam` / `--bsg` / `--game-only` | Launch / watch variants |
+| `--session --hidden` / `--show-console` | Console visibility |
+| `--session --launcher "path"` | Explicit `BsgLauncher.exe` |
 | `--apply game` / `--apply default` | One-shot presets from `config.json` |
-| `--reset` | Neutral baseline (C50 / G1.00 / DV50) on the primary monitor |
-| `--watch` | Forever game-only watch (no auto-exit); prefer `--session` |
+| `--reset` | Neutral baseline on the primary monitor |
+| `--watch` | Forever game-only watch; prefer `--session` |
 
 ## `config.json`
 
-Keep this file next to `TarkovNvColor.exe`.
+Must sit next to `TarkovNvColor.exe`.
 
 ```json
 {
@@ -166,18 +153,6 @@ Keep this file next to `TarkovNvColor.exe`.
 }
 ```
 
-| Field | Meaning |
-|-------|---------|
-| `game` / `default` | Presets while Tarkov is running / not running |
-| `launchMode` | `auto`, `bsg`, or `steam` |
-| `steamAppId` | Steam App ID (`3932890`) |
-| `gameOnly` | `true` = same as `--game-only` |
-| `hideConsole` | `true` = no console window in session/watch. Not recommended — no `Ctrl+C`, no visible errors |
-| `launcherPath` | Optional full path to `BsgLauncher.exe` |
-| `gameProcess` / `launcherProcess` | Process names without `.exe` |
-| `pollMs` | Process poll interval (ms) |
-| `brightnessPercent` | Brightness used when applying CG (usually `50`) |
-
 ## Build from source
 
 ```powershell
@@ -186,38 +161,23 @@ dotnet build -c Release
 dotnet publish -c Release -r win-x64 --self-contained true -o publish -p:PublishSingleFile=true
 ```
 
-Then copy into a clean folder (same layout as `release\`):
+Copy into a clean folder:
 
 - `TarkovNvColor.exe`
 - `config.json`
-- the numbered `.bat` helpers (optional but recommended)
-
-Framework-dependent (needs .NET 10 installed):
-
-```powershell
-dotnet publish -c Release -r win-x64 --self-contained false -o publish
-```
-
-### Start Menu (manual)
-
-- Target: `...\TarkovNvColor.exe` (your Release folder)
-- Arguments: `--session`
-- Icon: `BsgLauncher.exe` is fine
-
-Or use `6-Fix-StartMenu-Shortcut.bat` after launcher updates.
+- the numbered `.bat` helpers (optional)
 
 ## How it works
 
 - **Digital Vibrance** → NVIDIA NVAPI (`nvapi64.dll`), primary display
-- **Contrast / Gamma** → NVIDIA desktop-color formula + `NvAPI_DISP_SetTargetGammaCorrection` on the GDI primary display (same math as Control Panel)
-- Uses the driver already on your PC; nothing extra is downloaded
+- **Contrast / Gamma** → NVIDIA desktop-color formula + `NvAPI_DISP_SetTargetGammaCorrection` on the GDI primary display
+- Uses the driver already on your PC
 
 ## Notes
 
 - Best with borderless / windowed fullscreen Tarkov on the main monitor.
 - Control Panel sliders may lag the real image briefly; the image path is NVAPI.
 - Alt-tab focus-based restore is **not** supported (process-based only).
-- Keep the console visible unless you have a good reason. It is your only way to see errors and to stop the app with `Ctrl+C` (which restores your colors).
 - Not affiliated with Battlestate Games or NVIDIA.
 - Use at your own risk. If something looks wrong, run `5-Reset-Colors.bat` / `--reset` or restore defaults in NVIDIA Control Panel.
 

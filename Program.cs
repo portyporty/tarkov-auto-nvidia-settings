@@ -486,6 +486,7 @@ internal static class Program
     {
         try
         {
+            Console.WriteLine($"Config: {AppConfig.ResolvedPath}");
             Apply(preset, parts);
             Console.WriteLine($"Applied {label}.");
             if (parts.HasFlag(Parts.ContrastGamma))
