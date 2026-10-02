@@ -556,7 +556,21 @@ internal static class Program
         {
             var handle = GetConsoleWindow();
             if (handle != IntPtr.Zero)
+            {
+                // Windows Terminal draws the window you see. GetConsoleWindow() is only
+                // the PseudoConsoleWindow behind it, so hiding that handle leaves Terminal open.
+                var parent = GetParent(handle);
+                if (parent != IntPtr.Zero)
+                    ShowWindow(parent, SwHide);
                 ShowWindow(handle, SwHide);
+            }
+
+            // Shortcut / double-click: this process owns the console. Detach so Terminal exits.
+            // A .bat still has cmd attached; keep that console and only leave the window hidden.
+            var ids = new uint[16];
+            var attached = GetConsoleProcessList(ids, (uint)ids.Length);
+            if (attached == 1)
+                FreeConsole();
         }
         catch
         {
@@ -568,6 +582,15 @@ internal static class Program
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetParent(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
